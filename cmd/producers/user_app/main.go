@@ -24,15 +24,15 @@ func sendMsg(sqsClient *sqs.Client, queueUrl string, randInt int) {
 	log.Println("Sending Messages Start: ", randInt, finalRand)
 
 	newMsg := queue.MessageQueue{
-		EventType: "monitor-app",
-		ClientId:  "client-1",
+		EventType: "user-app",
+		ClientId:  "client-2",
 	}
 	sendParams := sqs.SendMessageInput{
 		QueueUrl: aws.String(queueUrl),
 	}
 
 	if finalRand%2 == 0 {
-		newMsg.Message = fmt.Sprintf("Hi Corinthians! %d", randInt)
+		newMsg.Message = fmt.Sprintf("Hi Liverpool: %d", randInt)
 		msgBytes, _ := json.Marshal(newMsg)
 		sendParams.MessageBody = aws.String(string(msgBytes))
 		_, err := sqsClient.SendMessage(context.Background(), &sendParams)
@@ -41,7 +41,7 @@ func sendMsg(sqsClient *sqs.Client, queueUrl string, randInt int) {
 		}
 	} else {
 		for i := 0; i < finalRand; i++ {
-			newMsg.Message = fmt.Sprintf("Hi Corinthians! %d", i)
+			newMsg.Message = fmt.Sprintf("Hi Liverpool: %d", i)
 			msgBytes, _ := json.Marshal(newMsg)
 			sendParams.MessageBody = aws.String(string(msgBytes))
 			_, err := sqsClient.SendMessage(context.Background(), &sendParams)
@@ -53,7 +53,7 @@ func sendMsg(sqsClient *sqs.Client, queueUrl string, randInt int) {
 }
 
 func main() {
-	log.Println("Starting Monitor App ------>")
+	log.Println("Starting User App ------>")
 	sqsClient, err := configs.CreateQueueClient()
 	if err != nil {
 		log.Fatal("Error creating queue client: ", err)
@@ -76,7 +76,7 @@ func main() {
 	for {
 		select {
 		case reason := <-signalCh:
-			fmt.Println("Shout Down Monitor app. Reason: ", reason.String())
+			fmt.Println("Shout Down User app. Reason: ", reason.String())
 			return
 		default:
 			go sendMsg(&sqsClient, queueUrl, randInt)

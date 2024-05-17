@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 
-	// "github.com/RomeroGabriel/event-process-app/internal/processor"
 	"github.com/RomeroGabriel/event-process-app/configs"
 	"github.com/RomeroGabriel/event-process-app/internal/processor"
 )
@@ -26,7 +25,7 @@ func main() {
 
 	// Managing Queue
 	// var queueUrls []string
-	// paginator := sqs.NewListQueuesPaginator(sqsClient, &sqs.ListQueuesInput{})
+	// paginator := sqs.NewListQueuesPaginator(&sqsClient, &sqs.ListQueuesInput{})
 
 	// for paginator.HasMorePages() {
 	// 	output, err := paginator.NextPage(context.TODO())
