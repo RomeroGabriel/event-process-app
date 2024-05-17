@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -22,18 +23,27 @@ func sendMsg(sqsClient *sqs.Client, queueUrl string, randInt int) {
 	finalRand = finalRand + randInt
 	log.Println("Sending Messages Start: ", randInt, finalRand)
 
-	sendParams := sqs.SendMessageInput{
-		MessageBody: aws.String(fmt.Sprintf("Hi Corinthians! %d", rand.Intn(100))),
-		QueueUrl:    aws.String(queueUrl),
+	newMsg := queue.MessageQueue{
+		EventType: "monitor-app",
+		ClientId:  "client-1",
 	}
+	sendParams := sqs.SendMessageInput{
+		QueueUrl: aws.String(queueUrl),
+	}
+
 	if finalRand%2 == 0 {
+		newMsg.Message = fmt.Sprintf("Hi Corinthians! %d", randInt)
+		msgBytes, _ := json.Marshal(newMsg)
+		sendParams.MessageBody = aws.String(string(msgBytes))
 		_, err := sqsClient.SendMessage(context.Background(), &sendParams)
 		if err != nil {
 			log.Fatalf("Error sending a message: %s", err)
 		}
 	} else {
 		for i := 0; i < finalRand; i++ {
-			sendParams.MessageBody = aws.String(fmt.Sprintf("Hi Corinthians! %d", i))
+			newMsg.Message = fmt.Sprintf("Hi Corinthians! %d", i)
+			msgBytes, _ := json.Marshal(newMsg)
+			sendParams.MessageBody = aws.String(string(msgBytes))
 			_, err := sqsClient.SendMessage(context.Background(), &sendParams)
 			if err != nil {
 				log.Fatalf("Error sending a message: %s", err)

@@ -2,6 +2,7 @@ package processor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -21,24 +22,25 @@ func StartProcessor(sqsClient sqs.Client, queueName string) {
 		WaitTimeSeconds:     *aws.Int32(5),
 	}
 
+	var msgQueue queue.MessageQueue
 	for {
 		result, err := sqsClient.ReceiveMessage(context.Background(), receiveParams)
 		if err != nil {
 			log.Fatalf("Error receiving a message: %s", err)
 		}
 		for _, msg := range result.Messages {
-			fmt.Println("Message RECEIVED: ", msg)
-			fmt.Println("Text: ", *msg.Body)
-			// deleteParams := &sqs.DeleteMessageInput{
-			// 	QueueUrl:      aws.String("http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/CorinthiansQueue"),
-			// 	ReceiptHandle: msg.ReceiptHandle,
-			// }
-			// _, err = sqsClient.DeleteMessage(context.Background(), deleteParams)
-			// if err != nil {
-			// 	log.Fatalf("Error deleting msg: %s", err)
-			// }
+			err = json.Unmarshal([]byte(*msg.Body), &msgQueue)
+			if err != nil {
+				fmt.Println("ERROR UNMARSHAL: ", err)
+				// delete message if it's not in right format
+			}
+			go validateMessage(msgQueue)
 		}
 		fmt.Println("===============================")
 		fmt.Println()
 	}
+}
+
+func validateMessage(msg queue.MessageQueue) {
+	fmt.Println("Starting the Validate Phase: ", msg)
 }
