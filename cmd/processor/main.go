@@ -1,52 +1,39 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
+	"os"
 
-	"github.com/RomeroGabriel/event-process-app/internal/processor"
 	// "github.com/RomeroGabriel/event-process-app/internal/processor"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/RomeroGabriel/event-process-app/configs"
+	"github.com/RomeroGabriel/event-process-app/internal/processor"
 )
 
 func main() {
 	fmt.Println("Starting the Application")
 
-	awsEndpoint := "http://localhost:4566"
-	awsRegion := "us-east-1"
-
-	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-		if awsEndpoint != "" {
-			return aws.Endpoint{
-				PartitionID:   "aws",
-				URL:           awsEndpoint,
-				SigningRegion: awsRegion,
-			}, nil
-		}
-		// returning EndpointNotFoundError will allow the service to fallback to its default resolution
-		return aws.Endpoint{}, &aws.EndpointNotFoundError{}
-	})
-
-	awsCfg, err := config.LoadDefaultConfig(context.Background(),
-		config.WithRegion(awsRegion),
-		config.WithEndpointResolverWithOptions(customResolver),
-	)
+	sqsClient, err := configs.CreateQueueClient()
 	if err != nil {
-		log.Fatalf("Cannot load the AWS configs: %s", err)
+		log.Fatal("Error creating queue client: ", err)
 	}
-	sqsClient := sqs.NewFromConfig(awsCfg)
-	processor.StartProcessor(*sqsClient)
+
+	queueName := os.Getenv("QUEUE_NAME")
+	if queueName == "" {
+		panic("no QUEUE_NAME specified")
+	}
+	processor.StartProcessor(sqsClient, queueName)
 
 	// Managing Queue
 	// var queueUrls []string
 	// paginator := sqs.NewListQueuesPaginator(sqsClient, &sqs.ListQueuesInput{})
 
 	// for paginator.HasMorePages() {
-	// 	output, _ := paginator.NextPage(context.TODO())
+	// 	output, err := paginator.NextPage(context.TODO())
+	// 	if err != nil {
+	// 		log.Println("Error listing Queue: ", err)
+	// 		continue
+	// 	}
 	// 	queueUrls = append(queueUrls, output.QueueUrls...)
 	// }
 

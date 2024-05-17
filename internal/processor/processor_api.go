@@ -10,14 +10,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 )
 
-// INJECT THIS!
-var QueueName string = "SQS_QUEUE"
-
-func StartProcessor(sqsClient sqs.Client) {
-	// PENSAR: Adicionar a config aqui ou deixar injetado?
-	queueUrl, err := queue.GetOrCreateQueueUrl(sqsClient, QueueName)
+func StartProcessor(sqsClient sqs.Client, queueName string) {
+	queueUrl, err := queue.GetOrCreateQueueUrl(sqsClient, queueName)
 	if err != nil {
-		log.Fatalf("Couldn't create queue %v. Here's why: %v\n", QueueName, err)
+		log.Fatal("Couldn't create/get queue ", queueName, " Error: ", err)
 	}
 	receiveParams := &sqs.ReceiveMessageInput{
 		MaxNumberOfMessages: *aws.Int32(1),

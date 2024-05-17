@@ -10,13 +10,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/RomeroGabriel/event-process-app/configs"
 	"github.com/RomeroGabriel/event-process-app/pkg/queue"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 )
-
-var QueueName string = "SQS_QUEUE"
 
 func sendMsg(sqsClient *sqs.Client, queueUrl string, randInt int) {
 
@@ -46,33 +44,19 @@ func sendMsg(sqsClient *sqs.Client, queueUrl string, randInt int) {
 
 func main() {
 	log.Println("Starting Monitor App ------>")
-
-	awsEndpoint := "http://localhost:4566"
-	awsRegion := "us-east-1"
-
-	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-		if awsEndpoint != "" {
-			return aws.Endpoint{
-				PartitionID:   "aws",
-				URL:           awsEndpoint,
-				SigningRegion: awsRegion,
-			}, nil
-		}
-		// returning EndpointNotFoundError will allow the service to fallback to its default resolution
-		return aws.Endpoint{}, &aws.EndpointNotFoundError{}
-	})
-
-	awsCfg, err := config.LoadDefaultConfig(context.Background(),
-		config.WithRegion(awsRegion),
-		config.WithEndpointResolverWithOptions(customResolver),
-	)
+	sqsClient, err := configs.CreateQueueClient()
 	if err != nil {
-		log.Fatalf("Cannot load the AWS configs: %s", err)
+		log.Fatal("Error creating queue client: ", err)
 	}
-	sqsClient := sqs.NewFromConfig(awsCfg)
-	queueUrl, err := queue.GetOrCreateQueueUrl(*sqsClient, QueueName)
+
+	queueName := os.Getenv("QUEUE_NAME")
+	if queueName == "" {
+		panic("no QUEUE_NAME specified")
+	}
+
+	queueUrl, err := queue.GetOrCreateQueueUrl(sqsClient, queueName)
 	if err != nil {
-		log.Fatalf("Couldn't create queue %v. Here's why: %v\n", QueueName, err)
+		log.Fatal("Couldn't create/get queue ", queueName, " Error: ", err)
 	}
 
 	signalCh := make(chan os.Signal, 1)
@@ -84,7 +68,7 @@ func main() {
 			return
 		default:
 			randInt := rand.Intn(50)
-			go sendMsg(sqsClient, queueUrl, randInt)
+			go sendMsg(&sqsClient, queueUrl, randInt)
 			time.Sleep(time.Duration(randInt) * time.Second)
 		}
 	}
