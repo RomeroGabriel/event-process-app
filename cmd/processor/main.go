@@ -1,27 +1,53 @@
 package main
 
 import (
-	"fmt"
+	"database/sql"
 	"log"
 	"os"
 
 	"github.com/RomeroGabriel/event-process-app/configs"
 	"github.com/RomeroGabriel/event-process-app/internal/processor"
+	"github.com/RomeroGabriel/event-process-app/pkg/queue"
 )
 
 func main() {
-	fmt.Println("Starting the Application")
-
 	sqsClient, err := configs.CreateQueueClient()
 	if err != nil {
 		log.Fatal("Error creating queue client: ", err)
 	}
-
 	queueName := os.Getenv("QUEUE_NAME")
 	if queueName == "" {
 		panic("no QUEUE_NAME specified")
 	}
-	processor.StartProcessor(sqsClient, queueName)
+	queueUrl, err := queue.GetOrCreateQueueUrl(sqsClient, queueName)
+	if err != nil {
+		log.Fatal("Couldn't create/get queue ", queueName, " Error: ", err)
+	}
+
+	dbDriver := os.Getenv("DB_DRIVER")
+	dbConnStr := os.Getenv("DB_CONNECTION")
+	if dbDriver == "" {
+		panic("no DB_DRIVER specified")
+	}
+	if dbConnStr == "" {
+		panic("no dbConnStr specified")
+	}
+	database, err := sql.Open(dbDriver, dbConnStr)
+	if err != nil {
+		panic(err)
+	}
+	defer database.Close()
+	err = database.Ping()
+	if err != nil {
+		log.Fatal("Error connecting: ", err)
+	}
+
+	processorDb, err := processor.NewProcessorRepository(database)
+	if err != nil {
+		log.Fatal("Error creating repository: ", err)
+	}
+	container := processor.NewProcessorContainer(&sqsClient, queueUrl, processorDb)
+	processor.StartProcessor(*container)
 
 	// Managing Queue
 	// var queueUrls []string
@@ -41,7 +67,7 @@ func main() {
 	// } else {
 	// 	for _, queueUrl := range queueUrls {
 	// 		fmt.Printf("\t%v\n", queueUrl)
-	// 		sqsClient.DeleteQueue(context.TODO(), &sqs.DeleteQueueInput{QueueUrl: aws.String(queueUrl)})
+	// 		// sqsClient.DeleteQueue(context.TODO(), &sqs.DeleteQueueInput{QueueUrl: aws.String(queueUrl)})
 	// 	}
 	// }
 }
