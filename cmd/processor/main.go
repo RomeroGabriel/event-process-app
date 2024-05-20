@@ -8,6 +8,9 @@ import (
 	"github.com/RomeroGabriel/event-process-app/configs"
 	"github.com/RomeroGabriel/event-process-app/internal/processor"
 	"github.com/RomeroGabriel/event-process-app/pkg/queue"
+
+	// postgres
+	_ "github.com/lib/pq"
 )
 
 func main() {

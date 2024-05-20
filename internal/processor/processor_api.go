@@ -10,9 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
-
-	// postgres
-	_ "github.com/lib/pq"
 )
 
 type ProcessorContainer struct {
@@ -46,6 +43,7 @@ func StartProcessor(container ProcessorContainer) {
 			log.Fatalf("Error receiving a message: %s", err)
 		}
 		log.Printf("Received %d messages.", len(result.Messages))
+
 		for _, msg := range result.Messages {
 			go ValidateMessage(container, msg)
 		}
@@ -55,21 +53,37 @@ func StartProcessor(container ProcessorContainer) {
 func ValidateMessage(container ProcessorContainer, msg types.Message) {
 	var msgQueue queue.MessageQueue
 	fmt.Println("Starting the Validate Phase: ", string(*msg.Body))
+
+	deleteMsgFunc := func(sqsClient sqs.Client, queueUrl, ReceiptHandle string) {
+		_, err := sqsClient.DeleteMessage(context.Background(), &sqs.DeleteMessageInput{
+			QueueUrl:      aws.String(queueUrl),
+			ReceiptHandle: aws.String(ReceiptHandle),
+		})
+		if err != nil {
+			log.Println("Error deleting message: ", err)
+		}
+	}
+
 	err := json.Unmarshal([]byte(*msg.Body), &msgQueue)
 	if err != nil {
 		log.Printf("Error unmarshalling message. Err: %s.\nDeleting the message on the queue.", err)
-		_, errD := container.sqsClient.DeleteMessage(context.Background(), &sqs.DeleteMessageInput{
-			QueueUrl:      aws.String(container.queueUrl),
-			ReceiptHandle: msg.ReceiptHandle,
-		})
-		if errD != nil {
-			log.Println("Error deleting message: ", errD)
-		}
+		deleteMsgFunc(*container.sqsClient, container.queueUrl, *msg.ReceiptHandle)
 	}
-	allClients, err := container.processorDb.FindAllClient()
-	fmt.Println(allClients)
-	fmt.Println(err)
-	// Validate client exist
-	// Validete event type
-	// Validate if msg is repetead
+
+	if msgQueue.ClientId == "" {
+		log.Println("Empty ClientId\nDeleting the message on the queue.")
+		deleteMsgFunc(*container.sqsClient, container.queueUrl, *msg.ReceiptHandle)
+		return
+	}
+	if msgQueue.EventType == "" {
+		log.Println("Empty EventType\nDeleting the message on the queue.")
+		deleteMsgFunc(*container.sqsClient, container.queueUrl, *msg.ReceiptHandle)
+		return
+	}
+	if msgQueue.Message == "" {
+		log.Println("Empty Message\nDeleting the message on the queue.")
+		deleteMsgFunc(*container.sqsClient, container.queueUrl, *msg.ReceiptHandle)
+		return
+	}
+
 }
