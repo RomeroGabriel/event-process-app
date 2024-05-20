@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	sqsClient, err := configs.CreateQueueClient()
+	sqsClient, err := configs.CreateSqsClient()
 	if err != nil {
 		log.Fatal("Error creating queue client: ", err)
 	}
@@ -33,7 +33,7 @@ func main() {
 		panic("no DB_DRIVER specified")
 	}
 	if dbConnStr == "" {
-		panic("no dbConnStr specified")
+		panic("no DB_CONNECTION specified")
 	}
 	database, err := sql.Open(dbDriver, dbConnStr)
 	if err != nil {
