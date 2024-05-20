@@ -3,8 +3,8 @@ package processor
 import (
 	"context"
 	"database/sql"
-	"log"
-	"time"
+
+	"github.com/RomeroGabriel/event-process-app/pkg/queue"
 )
 
 type ProcessorRepository struct {
@@ -27,12 +27,15 @@ BEGIN
 END $$;
 `
 
-var schemaMsg = `CREATE TABLE IF NOT EXISTS Message (
+var schemaMsg = `CREATE TABLE IF NOT EXISTS message (
+		message_id TEXT NOT NULL,
 		message TEXT NOT NULL,
+		event_type TEXT NOT NULL,
 		fk_client_name VARCHAR(100),
 		CONSTRAINT fk_client
 			FOREIGN KEY(fk_client_name) 
-			REFERENCES client(name)
+			REFERENCES client(name),
+		PRIMARY KEY (message_id)
 		);`
 
 func NewProcessorRepository(db *sql.DB) (*ProcessorRepository, error) {
@@ -53,36 +56,13 @@ func NewProcessorRepository(db *sql.DB) (*ProcessorRepository, error) {
 	}, nil
 }
 
-var defaultSecondTimeout = 1 * time.Second
-
-// Fake Cache
-var clientCache []string
-
-func (r *ProcessorRepository) FindAllClient() ([]string, error) {
-	if clientCache != nil {
-		// Could add a len validation between clientCache and table rows
-		return clientCache, nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), defaultSecondTimeout)
-	defer cancel()
-	rows, err := r.Db.QueryContext(ctx, "SELECT name FROM client")
-	if err != nil {
-		return nil, err
-	}
-	tAll := []string{}
-	for rows.Next() {
-		var td string
-		if err := rows.Scan(&td); err != nil {
-			return nil, err
-		}
-		tAll = append(tAll, td)
-	}
-	clientCache = tAll
-	select {
-	case <-ctx.Done():
-		log.Println("Context Canceled on FindAllClient")
-		return nil, context.Canceled
-	default:
-		return tAll, nil
-	}
+func (r *ProcessorRepository) SaveMessage(msg queue.MessageQueue) error {
+	_, err := r.Db.ExecContext(
+		context.Background(),
+		"INSERT INTO message (message_id, message, event_type, fk_client_name) VALUES ($1, $2, $3, $4);",
+		msg.MessageId,
+		msg.Message,
+		msg.EventType,
+		msg.ClientId)
+	return err
 }
