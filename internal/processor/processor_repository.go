@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/RomeroGabriel/event-process-app/pkg/queue"
+	"github.com/RomeroGabriel/event-process-app/pkg/eventprocess"
 )
 
 type ProcessorRepository struct {
@@ -56,7 +56,7 @@ func NewProcessorRepository(db *sql.DB) (*ProcessorRepository, error) {
 	}, nil
 }
 
-func (r *ProcessorRepository) SaveMessage(msg queue.MessageQueue) error {
+func (r *ProcessorRepository) SaveMessage(msg eventprocess.EventMessage) error {
 	_, err := r.Db.ExecContext(
 		context.Background(),
 		"INSERT INTO message (message_id, message, event_type, fk_client_name) VALUES ($1, $2, $3, $4);",

@@ -49,8 +49,8 @@ func main() {
 	if err != nil {
 		log.Fatal("Error creating repository: ", err)
 	}
-	container := processor.NewProcessorContainer(&sqsClient, queueUrl, processorDb)
-	processor.StartProcessor(*container)
+	app := processor.NewProcessorApp(sqsClient, queueUrl, processorDb)
+	app.Execute()
 
 	// Managing Queue
 	// var queueUrls []string

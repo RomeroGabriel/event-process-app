@@ -5,112 +5,136 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
-	"github.com/RomeroGabriel/event-process-app/pkg/queue"
+	"github.com/RomeroGabriel/event-process-app/pkg/eventprocess"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
-
 	"github.com/lib/pq"
 )
 
-type ProcessorContainer struct {
-	sqsClient   *sqs.Client
-	queueUrl    string
-	processorDb *ProcessorRepository
+type EventProcessorDb interface {
+	SaveMessage(msg eventprocess.EventMessage) error
 }
 
-func NewProcessorContainer(sqsClient *sqs.Client, queueUrl string, processorDb *ProcessorRepository) *ProcessorContainer {
-	return &ProcessorContainer{
-		sqsClient:   sqsClient,
+type ProcessorApp struct {
+	queueClient sqs.Client
+	queueUrl    string
+	db          EventProcessorDb
+	wg          sync.WaitGroup
+}
+
+func NewProcessorApp(queueClient sqs.Client, queueUrl string, db EventProcessorDb) *ProcessorApp {
+	return &ProcessorApp{
+		queueClient: queueClient,
 		queueUrl:    queueUrl,
-		processorDb: processorDb,
+		db:          db,
+		wg:          sync.WaitGroup{},
 	}
 }
 
-func StartProcessor(container ProcessorContainer) {
-	log.Println("Starting the PROCESSOR EVENTS----->")
+func (p *ProcessorApp) Execute() {
+	ctx, cancel := context.WithCancel(context.Background())
+	go p.ReceiveMessage(ctx)
+
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
+	reason := <-signalCh
+	log.Println("\nStarting gracefully shutting down the app. Reason: ", reason)
+	cancel()
+	p.wg.Wait()
+	log.Println("Finish shutdown the app.")
+}
+
+func (p *ProcessorApp) ReceiveMessage(ctx context.Context) {
+	p.wg.Add(1)
+	defer p.wg.Done()
 
 	receiveParams := &sqs.ReceiveMessageInput{
 		MaxNumberOfMessages: *aws.Int32(1),
-		QueueUrl:            aws.String(container.queueUrl),
+		QueueUrl:            aws.String(p.queueUrl),
 		WaitTimeSeconds:     *aws.Int32(3),
 	}
-
-	log.Println("Listening queue messages")
 	for {
-		result, err := container.sqsClient.ReceiveMessage(context.Background(), receiveParams)
-		if err != nil {
-			log.Fatalf("Error receiving a message: %s", err)
-		}
-		log.Printf("Received %d messages.", len(result.Messages))
-
-		for _, msg := range result.Messages {
-			go ValidateMessage(container, msg)
+		select {
+		case <-ctx.Done():
+			log.Println("Stop listening to new messages! The app being shut down")
+			return
+		default:
+			result, err := p.queueClient.ReceiveMessage(context.Background(), receiveParams)
+			if err != nil {
+				log.Fatalf("Error receiving a message: %s", err)
+			}
+			log.Printf("Received %d messages.", len(result.Messages))
+			if len(result.Messages) > 0 {
+				for _, msg := range result.Messages {
+					go p.ValidateMessage(msg)
+				}
+			}
 		}
 	}
 }
 
-func ValidateMessage(container ProcessorContainer, msg types.Message) {
-	fmt.Println("Starting the Validate Phase: ", string(*msg.Body))
-	deleteMsgFunc := func(sqsClient sqs.Client, queueUrl, ReceiptHandle string) {
-		_, err := sqsClient.DeleteMessage(context.Background(), &sqs.DeleteMessageInput{
-			QueueUrl:      aws.String(queueUrl),
-			ReceiptHandle: aws.String(ReceiptHandle),
-		})
-		if err != nil {
-			log.Println("Error deleting message: ", err)
-		}
-	}
+var deleteMsgFunc = func(sqsClient sqs.Client, queueUrl, ReceiptHandle string) error {
+	_, err := sqsClient.DeleteMessage(context.Background(), &sqs.DeleteMessageInput{
+		QueueUrl:      aws.String(queueUrl),
+		ReceiptHandle: aws.String(ReceiptHandle),
+	})
+	return err
+}
 
-	var msgQueue queue.MessageQueue
-	err := json.Unmarshal([]byte(*msg.Body), &msgQueue)
+func (p *ProcessorApp) ValidateMessage(msg types.Message) {
+	// foreach msg
+	p.wg.Add(1)
+	defer p.wg.Done()
+	fmt.Println("Starting the Validate Phase: ", string(*msg.Body))
+	var eventMsg eventprocess.EventMessage
+	err := json.Unmarshal([]byte(*msg.Body), &eventMsg)
+
 	if err != nil {
 		log.Printf("Error unmarshalling message. Err: %s.\nDeleting the message on the queue.", err)
-		deleteMsgFunc(*container.sqsClient, container.queueUrl, *msg.ReceiptHandle)
+		deleteMsgFunc(p.queueClient, p.queueUrl, *msg.ReceiptHandle)
 		return
 	}
-	msgQueue.MessageId = *msg.MessageId
-
-	if msgQueue.ClientId == "" {
-		log.Println("Empty ClientId. Deleting the message on the queue.")
-		deleteMsgFunc(*container.sqsClient, container.queueUrl, *msg.ReceiptHandle)
-		return
-	}
-	if msgQueue.EventType == "" {
-		log.Println("Empty EventType. Deleting the message on the queue.")
-		deleteMsgFunc(*container.sqsClient, container.queueUrl, *msg.ReceiptHandle)
-		return
-	}
-	if msgQueue.Message == "" {
-		log.Println("Empty Message. Deleting the message on the queue.")
-		deleteMsgFunc(*container.sqsClient, container.queueUrl, *msg.ReceiptHandle)
+	eventMsg.MessageId = *msg.MessageId
+	if errV := eventMsg.ValidateEmptyFields(); errV != nil {
+		log.Println(errV)
+		deleteMsgFunc(p.queueClient, p.queueUrl, *msg.ReceiptHandle)
 		return
 	}
 
-	go PersistMessage(container, msgQueue, *msg.ReceiptHandle)
+	go p.PersistMessage(eventMsg, msg)
+	fmt.Println("Finishing Validate Message: ", eventMsg.Message)
 }
 
 var class23IntegrityConstraintViolationErrors = "23"
 
-func PersistMessage(container ProcessorContainer, msg queue.MessageQueue, ReceiptHandle string) {
+func (p *ProcessorApp) PersistMessage(msg eventprocess.EventMessage, queueMessage types.Message) {
+	// foreach msg
+	deleteMsg := true
+	p.wg.Add(1)
+	defer p.wg.Done()
 	fmt.Println("Starting Persist Message: ", msg)
-	err := container.processorDb.SaveMessage(msg)
+	err := p.db.SaveMessage(msg)
 	if err != nil {
 		if err, ok := err.(*pq.Error); ok {
 			// If the error is something about constraint violation, delete the message
 			if err.Code.Class() == pq.ErrorClass(class23IntegrityConstraintViolationErrors) {
 				log.Println("Error saving message. Errors message: ", err, ". Deleting the message on the queue.")
-				_, err := container.sqsClient.DeleteMessage(context.Background(), &sqs.DeleteMessageInput{
-					QueueUrl:      aws.String(container.queueUrl),
-					ReceiptHandle: aws.String(ReceiptHandle),
-				})
-				if err != nil {
-					log.Println("Error deleting message: ", err)
-				}
+			} else {
+				deleteMsg = false
+				log.Println("Error saving message: ", err)
 			}
-			return
 		}
-		log.Println("Error saving message: ", err)
+	}
+	if deleteMsg {
+		deleteMsgFunc(p.queueClient, p.queueUrl, *queueMessage.ReceiptHandle)
+		if err != nil {
+			log.Println("Error deleting message: ", err)
+		}
 	}
 }

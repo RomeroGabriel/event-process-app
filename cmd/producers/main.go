@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/RomeroGabriel/event-process-app/configs"
+	"github.com/RomeroGabriel/event-process-app/pkg/eventprocess"
 	"github.com/RomeroGabriel/event-process-app/pkg/queue"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
@@ -20,7 +21,7 @@ import (
 
 func fakeMonitorProducer(sqsClient *sqs.Client, queueUrl string) {
 	randInt := rand.Intn(100000)
-	newMsg := queue.MessageQueue{
+	newMsg := eventprocess.EventMessage{
 		EventType: "monitor-app",
 		ClientId:  "client-1",
 		Message:   fmt.Sprintf("SALVE O CORINTHIANS! %d", randInt),
@@ -39,7 +40,7 @@ func fakeMonitorProducer(sqsClient *sqs.Client, queueUrl string) {
 
 func fakeTransactionProducer(sqsClient *sqs.Client, queueUrl string) {
 	randInt := rand.Intn(100000)
-	newMsg := queue.MessageQueue{
+	newMsg := eventprocess.EventMessage{
 		EventType: "transaction-app",
 		ClientId:  "client-2",
 		Message:   fmt.Sprintf("LET'S GO KNICKS: %d", randInt),
@@ -58,7 +59,7 @@ func fakeTransactionProducer(sqsClient *sqs.Client, queueUrl string) {
 
 func fakeUserProducer(sqsClient *sqs.Client, queueUrl string) {
 	randInt := rand.Intn(100000)
-	newMsg := queue.MessageQueue{
+	newMsg := eventprocess.EventMessage{
 		EventType: "user-app",
 		ClientId:  "client-3",
 		Message:   fmt.Sprintf("YNWA LIVEPOOL: %d", randInt),
@@ -92,7 +93,7 @@ func fakeBadMessage(sqsClient *sqs.Client, queueUrl string) {
 
 func main() {
 	log.Println("Starting Fake Producers ------>")
-	sqsClient, err := configs.CreateQueueClient()
+	sqsClient, err := configs.CreateSqsClient()
 	if err != nil {
 		log.Fatal("Error creating queue client: ", err)
 	}
