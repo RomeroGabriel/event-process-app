@@ -111,7 +111,7 @@ func main() {
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	fakeTimeOut, _ := strconv.Atoi(os.Getenv("PRODUCERS_FAKE_TIMEOUT"))
 	if fakeTimeOut == 0 {
-		fakeTimeOut = 10
+		fakeTimeOut = 100
 	}
 	for {
 		select {
@@ -123,7 +123,7 @@ func main() {
 			go fakeTransactionProducer(&sqsClient, queueUrl)
 			go fakeUserProducer(&sqsClient, queueUrl)
 			go fakeBadMessage(&sqsClient, queueUrl)
-			time.Sleep(time.Duration(fakeTimeOut) * time.Second)
+			time.Sleep(time.Duration(fakeTimeOut) * time.Millisecond)
 		}
 	}
 }

@@ -3,7 +3,6 @@ package processor
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -39,11 +38,13 @@ func NewProcessorApp(queueClient sqs.Client, queueUrl string, db EventProcessorD
 
 func (p *ProcessorApp) Execute() {
 	ctx, cancel := context.WithCancel(context.Background())
+	log.Println("Starting the application!")
 	go p.ReceiveMessage(ctx)
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
 	reason := <-signalCh
+
 	log.Println("\nStarting gracefully shutting down the app. Reason: ", reason)
 	cancel()
 	p.wg.Wait()
@@ -55,9 +56,9 @@ func (p *ProcessorApp) ReceiveMessage(ctx context.Context) {
 	defer p.wg.Done()
 
 	receiveParams := &sqs.ReceiveMessageInput{
-		MaxNumberOfMessages: *aws.Int32(1),
+		MaxNumberOfMessages: *aws.Int32(10),
 		QueueUrl:            aws.String(p.queueUrl),
-		WaitTimeSeconds:     *aws.Int32(3),
+		WaitTimeSeconds:     *aws.Int32(1),
 	}
 	for {
 		select {
@@ -91,24 +92,23 @@ func (p *ProcessorApp) ValidateMessage(msg types.Message) {
 	// foreach msg
 	p.wg.Add(1)
 	defer p.wg.Done()
-	fmt.Println("Starting the Validate Phase: ", string(*msg.Body))
+	log.Println("Validating message: ", *msg.MessageId)
 	var eventMsg eventprocess.EventMessage
 	err := json.Unmarshal([]byte(*msg.Body), &eventMsg)
 
 	if err != nil {
-		log.Printf("Error unmarshalling message. Err: %s.\nDeleting the message on the queue.", err)
+		log.Printf("Error unmarshalling message. Err: %s.\nDeleting the message %s on the queue.", err, *msg.MessageId)
 		deleteMsgFunc(p.queueClient, p.queueUrl, *msg.ReceiptHandle)
 		return
 	}
 	eventMsg.MessageId = *msg.MessageId
 	if errV := eventMsg.ValidateEmptyFields(); errV != nil {
-		log.Println(errV)
+		log.Println(errV, *msg.MessageId)
 		deleteMsgFunc(p.queueClient, p.queueUrl, *msg.ReceiptHandle)
 		return
 	}
 
 	go p.PersistMessage(eventMsg, msg)
-	fmt.Println("Finishing Validate Message: ", eventMsg.Message)
 }
 
 var class23IntegrityConstraintViolationErrors = "23"
@@ -118,13 +118,13 @@ func (p *ProcessorApp) PersistMessage(msg eventprocess.EventMessage, queueMessag
 	deleteMsg := true
 	p.wg.Add(1)
 	defer p.wg.Done()
-	fmt.Println("Starting Persist Message: ", msg)
+	log.Println("Persisting message: ", msg.MessageId)
 	err := p.db.SaveMessage(msg)
 	if err != nil {
 		if err, ok := err.(*pq.Error); ok {
 			// If the error is something about constraint violation, delete the message
 			if err.Code.Class() == pq.ErrorClass(class23IntegrityConstraintViolationErrors) {
-				log.Println("Error saving message. Errors message: ", err, ". Deleting the message on the queue.")
+				log.Println("Error saving message. Errors message: ", err, ". Deleting the message ", msg.MessageId, "on the queue.")
 			} else {
 				deleteMsg = false
 				log.Println("Error saving message: ", err)
