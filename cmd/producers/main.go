@@ -14,7 +14,6 @@ import (
 
 	"github.com/RomeroGabriel/event-process-app/configs"
 	"github.com/RomeroGabriel/event-process-app/pkg/eventprocess"
-	"github.com/RomeroGabriel/event-process-app/pkg/queue"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 )
@@ -103,7 +102,7 @@ func main() {
 		panic("no QUEUE_NAME specified")
 	}
 
-	queueUrl, err := queue.GetOrCreateQueueUrl(sqsClient, queueName)
+	queueUrl, err := configs.GetOrCreateQueueUrl(sqsClient, queueName)
 	if err != nil {
 		log.Fatal("Couldn't create/get queue ", queueName, " Error: ", err)
 	}

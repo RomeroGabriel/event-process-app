@@ -7,7 +7,6 @@ import (
 
 	"github.com/RomeroGabriel/event-process-app/configs"
 	"github.com/RomeroGabriel/event-process-app/internal/processor"
-	"github.com/RomeroGabriel/event-process-app/pkg/queue"
 
 	// postgres
 	_ "github.com/lib/pq"
@@ -22,7 +21,7 @@ func main() {
 	if queueName == "" {
 		panic("no QUEUE_NAME specified")
 	}
-	queueUrl, err := queue.GetOrCreateQueueUrl(sqsClient, queueName)
+	queueUrl, err := configs.GetOrCreateQueueUrl(sqsClient, queueName)
 	if err != nil {
 		log.Fatal("Couldn't create/get queue ", queueName, " Error: ", err)
 	}
