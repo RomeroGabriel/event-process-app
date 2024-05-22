@@ -27,11 +27,30 @@ BEGIN
 END $$;
 `
 
+var schemaEvent = `
+DO $$
+BEGIN
+   IF NOT EXISTS (
+      SELECT FROM pg_tables 
+      WHERE schemaname = current_schema() AND tablename = 'event_type'
+   ) THEN
+      CREATE TABLE event_type (
+		name VARCHAR(100),
+		PRIMARY KEY (name)
+      );
+	  INSERT INTO event_type (name) VALUES ('monitor-app'), ('transaction-app'), ('user-app');
+   END IF;
+END $$;
+`
+
 var schemaMsg = `CREATE TABLE IF NOT EXISTS message (
 		message_id TEXT NOT NULL,
 		message TEXT NOT NULL,
-		event_type TEXT NOT NULL,
+		fk_event_type_name TEXT NOT NULL,
 		fk_client_name VARCHAR(100),
+		CONSTRAINT fk_event_type
+			FOREIGN KEY(fk_event_type_name) 
+			REFERENCES event_type(name),
 		CONSTRAINT fk_client
 			FOREIGN KEY(fk_client_name) 
 			REFERENCES client(name),
@@ -47,6 +66,10 @@ func NewProcessorRepository(db *sql.DB) (*ProcessorRepository, error) {
 	if err != nil {
 		return nil, err
 	}
+	_, err = db.Exec(schemaEvent)
+	if err != nil {
+		return nil, err
+	}
 	_, err = db.Exec(schemaMsg)
 	if err != nil {
 		return nil, err
@@ -59,7 +82,7 @@ func NewProcessorRepository(db *sql.DB) (*ProcessorRepository, error) {
 func (r *ProcessorRepository) SaveMessage(msg eventprocess.EventMessage) error {
 	_, err := r.Db.ExecContext(
 		context.Background(),
-		"INSERT INTO message (message_id, message, event_type, fk_client_name) VALUES ($1, $2, $3, $4);",
+		"INSERT INTO message (message_id, message, fk_event_type_name, fk_client_name) VALUES ($1, $2, $3, $4);",
 		msg.MessageId,
 		msg.Message,
 		msg.EventType,

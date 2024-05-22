@@ -45,7 +45,7 @@ func (suite *ProcessorRepositoryTestSuite) TestSaveEmptyMessage() {
 	suite.Error(err)
 }
 
-var eventType = "type-1"
+var eventType = "monitor-app"
 var clientId = "client-1"
 var message = "message1"
 var messageId = "124141"
@@ -76,12 +76,25 @@ func (suite *ProcessorRepositoryTestSuite) TestSaveInvalidClient() {
 	suite.Error(err)
 }
 
+func (suite *ProcessorRepositoryTestSuite) TestSaveInvalidEvent() {
+	repo, err := NewProcessorRepository(suite.Db)
+	suite.NoError(err)
+	msgEntity := eventprocess.EventMessage{
+		EventType: "fake-event",
+		ClientId:  clientId,
+		Message:   message,
+		MessageId: messageId,
+	}
+	err = repo.SaveMessage(msgEntity)
+	suite.Error(err)
+}
+
 func (suite *ProcessorRepositoryTestSuite) TestSaveRepeatMessage() {
 	repo, err := NewProcessorRepository(suite.Db)
 	suite.NoError(err)
 	msgEntity := eventprocess.EventMessage{
 		EventType: eventType,
-		ClientId:  "fake-client",
+		ClientId:  clientId,
 		Message:   message,
 		MessageId: messageId,
 	}
