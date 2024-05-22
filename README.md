@@ -75,6 +75,12 @@ docker exec -it [CONTAINER ID] psql -U [DB USER] -W [DATABASE NAME]
 
 Em caso de dúvidas ou complicações, leia e siga os passos deste post do [StackOverflow](https://stackoverflow.com/questions/37099564/docker-how-can-run-the-psql-command-in-the-postgres-container).
 
+### Images
+
+![db example](db-example.png)
+
+![running example](running-example.png)
+
 ### Testes
 
 É possível executar testes no projeto para validação dos comportamentos dos componentes. É necessário fornecer um banco de dados PostgreSQL para a realização dos testes, passando as informações para as variáveis de ambiente `DB_DRIVER_TEST` e `DB_CONNECTION_TEST`. Para executar os testes, utilize os seguintes comandos:
