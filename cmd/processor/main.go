@@ -7,6 +7,7 @@ import (
 
 	"github.com/RomeroGabriel/event-process-app/configs"
 	"github.com/RomeroGabriel/event-process-app/internal/processor"
+	"github.com/RomeroGabriel/event-process-app/internal/queue"
 
 	// postgres
 	_ "github.com/lib/pq"
@@ -25,6 +26,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Couldn't create/get queue ", queueName, " Error: ", err)
 	}
+	appClient := queue.NewSQSQueueClient(sqsClient, queueName)
 
 	dbDriver := os.Getenv("DB_DRIVER")
 	dbConnStr := os.Getenv("DB_CONNECTION")
@@ -48,7 +50,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Error creating repository: ", err)
 	}
-	app := processor.NewProcessorApp(sqsClient, queueUrl, processorDb)
+	app := processor.NewProcessorApp(appClient, queueUrl, processorDb)
 	app.Execute()
 
 	// Managing Queue

@@ -3,6 +3,7 @@ package processor
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -10,8 +11,7 @@ import (
 	"syscall"
 
 	"github.com/RomeroGabriel/event-process-app/pkg/eventprocess"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/RomeroGabriel/event-process-app/pkg/queue"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/lib/pq"
 )
@@ -21,13 +21,13 @@ type EventProcessorDb interface {
 }
 
 type ProcessorApp struct {
-	queueClient sqs.Client
+	queueClient queue.QueueClient
 	queueUrl    string
 	db          EventProcessorDb
 	wg          sync.WaitGroup
 }
 
-func NewProcessorApp(queueClient sqs.Client, queueUrl string, db EventProcessorDb) *ProcessorApp {
+func NewProcessorApp(queueClient queue.QueueClient, queueUrl string, db EventProcessorDb) *ProcessorApp {
 	return &ProcessorApp{
 		queueClient: queueClient,
 		queueUrl:    queueUrl,
@@ -55,37 +55,39 @@ func (p *ProcessorApp) ReceiveMessage(ctx context.Context) {
 	p.wg.Add(1)
 	defer p.wg.Done()
 
-	receiveParams := &sqs.ReceiveMessageInput{
-		MaxNumberOfMessages: *aws.Int32(10),
-		QueueUrl:            aws.String(p.queueUrl),
-		WaitTimeSeconds:     *aws.Int32(1),
-	}
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("Stop listening to new messages! The app being shut down")
 			return
 		default:
-			result, err := p.queueClient.ReceiveMessage(context.Background(), receiveParams)
+			// result, err := p.queueClient.ReceiveMessage(context.Background(), receiveParams)
+			result, err := p.queueClient.ReceiveMessage()
 			if err != nil {
 				log.Fatalf("Error receiving a message: %s", err)
 			}
-			log.Printf("Received %d messages.", len(result.Messages))
-			if len(result.Messages) > 0 {
-				for _, msg := range result.Messages {
-					go p.ValidateMessage(msg)
-				}
-			}
+			go fakePrint(result)
 		}
 	}
 }
 
-var deleteMsgFunc = func(sqsClient sqs.Client, queueUrl, ReceiptHandle string) error {
-	_, err := sqsClient.DeleteMessage(context.Background(), &sqs.DeleteMessageInput{
-		QueueUrl:      aws.String(queueUrl),
-		ReceiptHandle: aws.String(ReceiptHandle),
-	})
-	return err
+func fakePrint(msg <-chan queue.QueueMessage) {
+	data := <-msg
+	msgData, ok := data.MessageData.(types.Message)
+	if ok {
+		fmt.Println("Message: ", data, *msgData.Body)
+	} else {
+		fmt.Println("Empty Message")
+	}
+}
+
+var deleteMsgFunc = func(sqsClient queue.QueueClient, queueUrl, ReceiptHandle string) error {
+	// _, err := sqsClient.DeleteMessage(context.Background(), &sqs.DeleteMessageInput{
+	// 	QueueUrl:      aws.String(queueUrl),
+	// 	ReceiptHandle: aws.String(ReceiptHandle),
+	// })
+	// return err
+	return nil
 }
 
 func (p *ProcessorApp) ValidateMessage(msg types.Message) {
